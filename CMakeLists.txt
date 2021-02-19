@@ -19,6 +19,10 @@ target_include_directories(ez-pool INTERFACE
 )
 target_compile_options(ez-pool INTERFACE "$<BUILD_INTERFACE:$<$<CXX_COMPILER_ID:MSVC>:/permissive->>")
 
+set_target_properties(ez-pool PROPERTIES EXPORT_NAME "pool")
+
+add_library(ez::pool ALIAS ez-pool)
+
 add_subdirectory("tests")
 
 set(CMAKE_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/ez-pool)
@@ -33,9 +37,10 @@ EXPORT ez-pool-targets
 )
 
 install_package(
-NAME ez-pool
-EXPORT ez-pool-targets
-VERSION ${EZ_POOL_VERSION}
+NAME "ez-pool"
+NAMESPACE "ez::"
+EXPORT "ez-pool-targets"
+VERSION "${EZ_POOL_VERSION}"
 DESTINATION DEFAULT
 COMPATIBILITY SameMajorVersion
 ARCH_INDEPENDENT
