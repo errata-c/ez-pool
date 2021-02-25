@@ -1,4 +1,5 @@
 #pragma once
+#include <type_traits>
 #include <cinttypes>
 #include <array>
 #include <bitset>
@@ -8,6 +9,8 @@ namespace ez::intern {
 	template<typename T, std::size_t BlockSize = 256>
 	class MemoryBlock {
 	public:
+		static constexpr std::size_t BlockBytes = sizeof(T) * BlockSize;
+
 		union Memory {
 			Memory() : index(0) {};
 			~Memory() {};
@@ -22,7 +25,12 @@ namespace ez::intern {
 		using reverse_iterator = std::reverse_iterator<iterator>;
 		using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
-		MemoryBlock()
+		static bool contains(const MemoryBlock* block, const T* obj) noexcept {
+			return (reinterpret_cast<std::uintptr_t>(block) < reinterpret_cast<std::uintptr_t>(obj)) &&
+				((reinterpret_cast<std::uintptr_t>(block) + BlockBytes) > reinterpret_cast<std::uintptr_t>(obj));
+		}
+
+		MemoryBlock() noexcept
 			: top(0)
 			, numFree(BlockSize)
 		{
@@ -33,14 +41,14 @@ namespace ez::intern {
 			}
 		}
 
-		T* alloc() {
+		T* alloc() noexcept {
 			assert(numFree != 0);
 			--numFree;
 			Memory& mem = data[top];
 			top = static_cast<std::uint16_t>(mem.index);
 			return &mem.object;
 		}
-		void free(const T* obj) {
+		void free(const T* obj) noexcept {
 			assert(!empty());
 			++numFree;
 			int offset = static_cast<int>(obj - basePtr());
@@ -48,64 +56,75 @@ namespace ez::intern {
 			top = static_cast<std::int16_t>(offset);
 		}
 
-		T* basePtr() {
+		T* basePtr() noexcept {
 			return &data.front().object;
 		}
-		const T* basePtr() const {
+		const T* basePtr() const noexcept {
 			return &data.front().object;
 		}
 
-		bool boundsCheck(T* obj) const {
+		bool contains(T* obj) const noexcept {
 			return obj >= (&data.data()->object) && obj < ((&data.data()->object) + BlockSize);
 		}
+		bool isFree(const T* obj) const noexcept {
+			for (const T & element : *this) {
+				if (obj == &element) {
+					return false;
+				}
+			}
+			return true;
+		}
+		bool isAllocated(const T* obj) const noexcept {
+			return !isFree(obj);
+		}
 
-		iterator begin() {
+		iterator begin() noexcept {
 			iterator tmp(this);
 			tmp.findFirst();
 			return tmp;
 		}
-		iterator end() {
+		iterator end() noexcept {
 			return iterator(this, BlockSize);
 		}
 		
-		const_iterator begin() const {
+		const_iterator begin() const noexcept {
 			const_iterator tmp(this);
 			tmp.findFirst();
 			return tmp;
 		}
-		const_iterator end() const {
+		const_iterator end() const noexcept {
 			return const_iterator(this, BlockSize);
 		}
 
-		const_iterator cbegin() const {
+		const_iterator cbegin() const noexcept {
 			return begin();
 		}
-		const_iterator cend() const {
+		const_iterator cend() const noexcept {
 			return end();
 		}
 
-		reverse_iterator rbegin() {
+		reverse_iterator rbegin() noexcept {
 			return std::make_reverse_iterator(end());
 		}
-		reverse_iterator rend() {
+		reverse_iterator rend() noexcept {
 			return std::make_reverse_iterator(begin());
 		}
 
-		const_reverse_iterator rbegin() const {
+		const_reverse_iterator rbegin() const noexcept {
 			return std::make_reverse_iterator(end());
 		}
-		const_reverse_iterator rend() const {
+		const_reverse_iterator rend() const noexcept {
 			return std::make_reverse_iterator(begin());
 		}
 
-		const_reverse_iterator crbegin() const {
+		const_reverse_iterator crbegin() const noexcept {
 			return std::make_reverse_iterator(end());
 		}
-		const_reverse_iterator crend() const {
+		const_reverse_iterator crend() const noexcept {
 			return std::make_reverse_iterator(begin());
 		}
 
-		iterator erase(const_iterator pos) {
+		iterator erase(const_iterator pos) noexcept {
 			assert(pos != cend());
 			pos.marks[pos.index] = true;
 			free(&*pos);
@@ -113,7 +132,7 @@ namespace ez::intern {
 
 			return iterator(this, pos.index, pos.marks);
 		}
-		iterator erase(const_iterator first, const_iterator last) {
+		iterator erase(const_iterator first, const_iterator last) noexcept {
 			assert(first != cend());
 			while (first != last) {
 				first.marks[first.index] = true;
@@ -123,7 +142,7 @@ namespace ez::intern {
 			return iterator(this, first.index, first.marks);
 		}
 
-		void clear() {
+		void clear() noexcept {
 			numFree = BlockSize;
 			top = 0;
 			int index = 1;
@@ -133,14 +152,14 @@ namespace ez::intern {
 			}
 		}
 
-		bool empty() const {
+		bool empty() const noexcept {
 			return numFree == BlockSize;
 		}
 
-		std::size_t size() const {
+		std::size_t size() const noexcept {
 			return BlockSize - numFree;
 		}
-		static constexpr std::size_t max_size() {
+		static constexpr std::size_t max_size() noexcept {
 			return BlockSize;
 		}
 
