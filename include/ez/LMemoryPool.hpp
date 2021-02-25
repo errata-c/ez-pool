@@ -2,6 +2,7 @@
 #include "MemoryPool.hpp"
 
 namespace ez {
+	// Live memory pool, does not allow allocation of uninitialized memory. Only allows construction in place, and destruction.
 	template<typename T>
 	class LMemoryPool: public MemoryPool<T> {
 	public:

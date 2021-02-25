@@ -25,11 +25,17 @@ namespace ez {
 		using block_iterator = typename Block::iterator;
 
 		//static constexpr std::ptrdiff_t align = alignof(T);
+		
+		// Block size in bytes
 		static constexpr std::ptrdiff_t BlockBytes = sizeof(Block);
 		
+		// List of blocks with openings
 		std::vector<Block*> freeList;
+		// Map of all allocated blocks
 		map_t map;
 
+		// count is the number of allocated objects
+		// bcount is the number of allocated blocks
 		std::ptrdiff_t count, bcount;
 
 		// Top pointer to avoid vector indirection for most allocations.
@@ -85,27 +91,38 @@ namespace ez {
 			
 			T* obj = top->alloc();
 
+			// Block used up completely
 			if (top->numFree == 0) {
 				freeList.pop_back();
 				if (!freeList.empty()) {
+					// We have a block with openings available
 					top = freeList.back();
 				}
 				else {
+					// no empty places, next block will be allocated next call to alloc
 					top = nullptr;
 				}
 			}
-
+			
 			++count;
 			return obj;
 		}
+
+		// Frees an object from the pool. Note that it is always possible to check if object is from this pool.
 		void free(T* obj) {
 			void* id = blockId(obj);
 			map_iterator iter = map.find(id);
-			assert(iter != map.end()); // This assertion triggers if the obj is not from this pool
 
+			// If this triggers, then the obj pointer is not within any valid block range
+			assert(iter != map.end());
+
+			// Check both blocks in the mapping
 			for (Block * block : iter->second) {
-				if ((reinterpret_cast<std::uintptr_t>(block) < reinterpret_cast<std::uintptr_t>(obj)) && 
-					((reinterpret_cast<std::uintptr_t>(block)+BlockBytes) > reinterpret_cast<std::uintptr_t>(obj))) {
+				if (Block::contains(block, obj)) {
+
+					// If this triggers, the obj pointer has already been freed.
+					assert(block->isAllocated(obj) && "The object pointer has already been freed!");
+
 					block->free(obj);
 					if (block->numFree == 1) {
 						freeList.push_back(block);
@@ -118,18 +135,25 @@ namespace ez {
 			assert(false); // This assertion triggers if the obj is not from this pool
 		}
 
+		// forwards parameters to object constructor
 		template<typename ... Ts>
 		T* create(Ts&&... args) {
 			T* obj = alloc();
+			if (obj == nullptr) {
+				return obj;
+			}
 			new (obj) T{std::forward<Ts>(args)...};
 			return obj;
 		}
 
+		// destroys the object and frees its data.
 		void destroy(T * obj) {
+			assert(obj != nullptr);
 			obj->~T();
 			free(obj);
 		}
 
+		// destroy all, then clear
 		void destroy_clear() {
 			for (T & obj : *this) {
 				obj.~T();
@@ -137,6 +161,7 @@ namespace ez {
 			clear();
 		}
 
+		// eliminate all allocated blocks with no active elements.
 		void shrink() {
 			auto iter = freeList.begin();
 			while (iter != freeList.end()) {
@@ -160,6 +185,25 @@ namespace ez {
 			}
 		}
 
+		// attempt to reserve storage for 'cap' elements. Automatically rounds up to multiple of BlockSize
+		void reserve(std::size_t cap) {
+			std::size_t mod = cap % BlockSize;
+			if (mod != 0) {
+				cap += BlockSize - mod;
+			}
+			
+			std::size_t nblocks = cap / BlockSize;
+			while (bcount < nblocks) {
+				Block* block = createBlock();
+				if (block == nullptr) {
+					break;
+				}
+				freeList.push_back(block);
+			}
+			top = freeList.back();
+		}
+
+		// free all blocks WITHOUT destroying their elements first.
 		void clear() {
 			freeList.clear();
 			for (auto&& iter : map) {
@@ -173,9 +217,11 @@ namespace ez {
 			top = nullptr;
 		}
 
+		// Total capacity available
 		std::ptrdiff_t capacity() const {
 			return static_cast<std::ptrdiff_t>(bcount * BlockSize);
 		}
+		// Total number of allocations
 		std::ptrdiff_t size() const {
 			return count;
 		}
