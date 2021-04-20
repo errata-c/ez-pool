@@ -1,14 +1,17 @@
 cmake_minimum_required(VERSION 3.15)
 
 project(EZ_POOL
-VERSION 0.1
+VERSION 0.2.1
 LANGUAGES CXX)
 
 include(GNUInstallDirs)
-find_package(ez-cmake CONFIG REQUIRED)
+include("cmake/ez-cmake/install-package.cmake")
 
 option(BUILD_TESTS "Build the test executables" ON)
 option(SEPARATE_DIRECTORY "Install the package into its own directory" ON)
+set(CONFIG_DIR "${CMAKE_INSTALL_DATAROOTDIR}/ez-pool" CACHE STRING "The relative directory to install package config files.")
+
+
 
 find_path(PHMAP_HEADERS "parallel_hashmap/phmap.h")
 
@@ -24,6 +27,7 @@ set_target_properties(ez-pool PROPERTIES EXPORT_NAME "pool")
 add_library(ez::pool ALIAS ez-pool)
 
 
+
 if(BUILD_TESTS)
 	add_subdirectory("tests")
 endif()
@@ -31,6 +35,8 @@ endif()
 if(SEPARATE_DIRECTORY)
 	set(CMAKE_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/ez-pool)
 endif()
+
+
 
 install(DIRECTORY "include/" DESTINATION "include")
 
@@ -41,10 +47,11 @@ install_package(
 	NAMESPACE "ez::"
 	EXPORT "ez-pool-targets"
 	VERSION "${EZ_POOL_VERSION}"
-	DESTINATION DEFAULT
+	DESTINATION "${CONFIG_DIR}"
 	COMPATIBILITY SameMajorVersion
 	ARCH_INDEPENDENT
-	POSTCONFIG "${CMAKE_CURRENT_SOURCE_DIR}/postconfig.cmake"
+	
+	POSTCONFIG "cmake/postconfig.cmake"
 )
 
 
