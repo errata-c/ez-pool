@@ -1,88 +1,98 @@
+#include <catch.hpp>
 #include <cstdlib>
 #include <fmt/printf.h>
 #include <ez/MemoryPool.hpp>
 
-int main() {
-	fmt::print("Hello, world!\n");
-
+TEST_CASE("basic") {
 	ez::MemoryPool<int> pool;
+
+	REQUIRE(pool.size() == 0);
+	REQUIRE(pool.empty());
+
 	int* a = pool.alloc();
+	REQUIRE(pool.size() == 1);
 	int* b = pool.alloc();
+	REQUIRE(pool.size() == 2);
 	int* c = pool.alloc();
+	REQUIRE(pool.size() == 3);
+
+	REQUIRE(pool.capacity() == 256);
 
 	*a = 7;
 	*b = 25;
 	*c = 1996;
 
-	fmt::print("a == {}, b == {}, c == {}\n", *a, *b, *c);
-	fmt::print("Pool capacity == {}\n", pool.capacity());
-	fmt::print("Pool size == {}\n", pool.size());
 
-	for (int value : pool) {
-		fmt::print("Found a value: {}\n", value);
-	}
+	{
+		auto it = pool.begin();
+		auto end = pool.end();
 
-	const ez::MemoryPool<int>& cpool = pool;
-	for (int value : cpool) {
-		fmt::print("Found a const value: {}\n", value);
+		REQUIRE(*it == *a);
+		REQUIRE(it != end);
+		++it;
+		REQUIRE(*it == *b);
+		REQUIRE(it != end);
+		++it;
+		REQUIRE(*it == *c);
+		REQUIRE(it != end);
+		++it;
+
+		REQUIRE(it == end);
 	}
 
 	pool.free(b);
-	fmt::print("\nFreed an element\n\n");
-
-
-	for (int value : pool) {
-		fmt::print("Found a value: {}\n", value);
-	}
+	REQUIRE(pool.size() == 2);
 	
-	for (int value : cpool) {
-		fmt::print("Found a const value: {}\n", value);
+	{
+		auto it = pool.begin();
+		auto end = pool.end();
+
+		REQUIRE(*it == *a);
+		REQUIRE(it != end);
+		++it;
+
+		REQUIRE(*it == *c);
+		REQUIRE(it != end);
+		++it;
+
+		REQUIRE(it == end);
 	}
 
 	pool.clear();
-	for (int value : pool) {
-		fmt::print("There shouldn't be any values!: {}\n", value);
-	}
+	REQUIRE(pool.empty());
 
-	fmt::print("Forcing allocation of another block.\n");
-	for (int i = 0; i < 512; ++i) {
+	for (int i = 0; i < 257; ++i) {
 		pool.create(i);
 	}
 
-	fmt::print("Pool capacity == {}\n", pool.capacity());
-	fmt::print("Pool size == {}\n", pool.size());
-
-	fmt::print("Printing out a long list of values from the pool; note that they may not be in order, and that is to be expected.\n");
-	for (int val : pool) {
-		fmt::print("{} ", val);
-	}
-	fmt::print("\n\n");
+	REQUIRE(pool.capacity() == 512);
+	REQUIRE(pool.size() == 257);
 
 	pool.destroy_clear();
-
-
-	srand(time(0));
+	REQUIRE(pool.empty());
 
 	for (int i = 0; i < 100; ++i) {
-		int* tmp = pool.create();
-		*tmp = (rand() % 2);
+		pool.create(i % 2);
 	}
 	
-	for (auto iter = pool.begin(), end = pool.end(); iter != end;) {
-		if (*iter == 1) {
-			iter = pool.erase(iter);
-		}
-		else {
-			++iter;
+	{
+		auto iter = pool.begin();
+		auto end = pool.end();
+		while (iter != end) {
+			if (*iter != 0) {
+				iter = pool.erase(iter);
+			}
+			else {
+				++iter;
+			}
 		}
 	}
 
-	fmt::print("Should print out all zeros:\n");
+	int count = 0;
 	for (int val : pool) {
-		fmt::print("{} ", val);
+		if (val != 0) {
+			++count;
+		}
 	}
-	fmt::print("\n\n");
-	
-	fmt::print("End basic test.\n");
-	return 0;
+	REQUIRE(count == 0);
 }

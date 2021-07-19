@@ -5,8 +5,18 @@ VERSION 0.1)
 
 find_package(fmt CONFIG REQUIRED)
 
-add_library(test_framework INTERFACE)
-target_link_libraries(test_framework INTERFACE ez::pool fmt::fmt)
+# We use the Catch2 library for testing
+find_package(Catch2 CONFIG REQUIRED)
 
-add_subdirectory("basic")
-add_subdirectory("strings")
+
+add_executable(ez-pool-tests 
+	"main.cpp"
+	"basic/basic.cpp"
+	"basic/block.cpp"
+	"strings/strings.cpp"
+)
+target_link_libraries(ez-pool-tests PRIVATE 
+	ez::pool
+	fmt::fmt
+	Catch2::Catch2
+)

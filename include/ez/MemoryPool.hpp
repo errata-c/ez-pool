@@ -11,15 +11,19 @@
 #include "intern/MemoryBlock.hpp"
 
 namespace ez {
-	// Can allocate without referencing the map at all, only one pointer indirection to the topmost block.
+	// Can allocate most of the time without referencing the map at all, only one pointer indirection to the topmost block.
 	// Can deallocate by accessing the map just once. That should be fairly performant.
+	// Note that the block size is not bytes, but a number of elements to store.
+	// This means if you need to conserve memory, you may want to change the size from its default.
 	template<typename T, std::size_t BlockSize = 256>
 	class MemoryPool {
 	private:
+		static_assert(BlockSize <= 256, "BlockSize currently must be less than or equal to 256!");
+
 		using Block = ez::intern::MemoryBlock<T, BlockSize>;
 		using Alloc = std::array<Block*, 2>;
 
-		using map_t = phmap::flat_hash_map<void*, Alloc>;
+		using map_t = phmap::flat_hash_map<const void*, Alloc>;
 		using map_iterator = typename map_t::iterator;
 		using const_map_iterator = typename map_t::const_iterator;
 		using block_iterator = typename Block::iterator;
@@ -110,7 +114,7 @@ namespace ez {
 
 		// Frees an object from the pool. Note that it is always possible to check if object is from this pool.
 		void free(T* obj) {
-			void* id = blockId(obj);
+			const void* id = blockId(obj);
 			map_iterator iter = map.find(id);
 
 			// If this triggers, then the obj pointer is not within any valid block range
@@ -203,7 +207,8 @@ namespace ez {
 			top = freeList.back();
 		}
 
-		// free all blocks WITHOUT destroying their elements first.
+		// Free all blocks WITHOUT calling destructors for the contained elements.
+		// It is undefined behavior to call this method when elements have been constructed via calls to 'create'
 		void clear() {
 			freeList.clear();
 			for (auto&& iter : map) {
@@ -218,32 +223,36 @@ namespace ez {
 		}
 
 		// Total capacity available
-		std::ptrdiff_t capacity() const {
+		std::ptrdiff_t capacity() const noexcept {
 			return static_cast<std::ptrdiff_t>(bcount * BlockSize);
 		}
 		// Total number of allocations
-		std::ptrdiff_t size() const {
+		std::ptrdiff_t size() const noexcept {
 			return count;
 		}
 
-		iterator begin() {
+		bool empty() const noexcept {
+			return size() == 0;
+		}
+
+		iterator begin() noexcept {
 			return iterator(map.begin(), map.end());
 		}
-		iterator end() {
+		iterator end() noexcept {
 			return iterator(map.end(), map.end());
 		}
 
-		const_iterator begin() const {
+		const_iterator begin() const noexcept {
 			return const_iterator(const_cast<MemoryPool*>(this)->begin());
 		}
-		const_iterator end() const {
+		const_iterator end() const noexcept {
 			return const_iterator(const_cast<MemoryPool*>(this)->end());
 		}
 
-		const_iterator cbegin() const {
+		const_iterator cbegin() const noexcept {
 			return const_iterator(const_cast<MemoryPool*>(this)->begin());
 		}
-		const_iterator cend() const {
+		const_iterator cend() const noexcept {
 			return const_iterator(const_cast<MemoryPool*>(this)->end());
 		}
 
@@ -272,11 +281,62 @@ namespace ez {
 			std::swap(count, other.count);
 			std::swap(top, other.top);
 		}
+
+		bool contains(const T* obj) const {
+			const void * block = blockId(obj);
+			const_map_iterator iter = map.find(block);
+
+			if (iter != map.end()) {
+				return Block::contains(iter->second[0], obj) || Block::contains(iter->second[1], obj);
+			}
+			else {
+				return false;
+			}
+		}
+
+		iterator find(const T* obj) {
+			void * block = blockId(obj);
+			map_iterator iter = map.find(block);
+
+			if (iter != map.end()) {
+				if (Block::contains(iter->second[0], obj)) {
+					return iterator(iter, map.end(), obj - iter->second[0]->basePtr());
+				}
+				else if (Block::contains(iter->second[1], obj)) {
+					return iterator(iter, map.end(), obj - iter->second[1]->basePtr());
+				}
+				else {
+					return end();
+				}
+			}
+			else {
+				return end();
+			}
+		}
+		const_iterator find(const T* obj) const {
+			const void* block = blockId(obj);
+			const_map_iterator iter = map.find(block);
+
+			if (iter != map.end()) {
+				if (Block::contains(iter->second[0], obj)) {
+					return const_iterator(iter, map.end(), obj - iter->second[0]->basePtr());
+				}
+				else if (Block::contains(iter->second[1], obj)) {
+					return const_iterator(iter, map.end(), obj - iter->second[1]->basePtr());
+				}
+				else {
+					return end();
+				}
+			}
+			else {
+				return end();
+			}
+		}
 	private:
 		/// Utility methods
-		static void* blockId(T* base) {
+		static const void* blockId(const T* base) noexcept {
 			std::uintptr_t offset = reinterpret_cast<std::uintptr_t>(base) % BlockBytes;
-			return reinterpret_cast<void*>(reinterpret_cast<std::uintptr_t>(base) - offset);
+			return reinterpret_cast<const void*>(reinterpret_cast<std::uintptr_t>(base) - offset);
 		}
 
 		Block * createBlock() {
@@ -286,8 +346,8 @@ namespace ez {
 			}
 			++bcount;
 
-			void* low = blockId(block->basePtr());
-			void* high = reinterpret_cast<void*>(reinterpret_cast<std::uintptr_t>(low) + BlockBytes);
+			const void* low = blockId(block->basePtr());
+			const void* high = reinterpret_cast<const void*>(reinterpret_cast<std::uintptr_t>(low) + BlockBytes);
 
 			auto iter = map.find(low);
 			if (iter == map.end()) {
@@ -309,7 +369,7 @@ namespace ez {
 		}
 		void destroyBlock(Block * block) {
 			void * low = blockId(block->basePtr());
-			void * high = low + BlockBytes;
+			void * high = reinterpret_cast<const void*>(reinterpret_cast<std::uintptr_t>(low) + BlockBytes);
 
 			auto iter = map.find(low);
 			assert(iter != map.end()); // The block must exist
@@ -332,7 +392,7 @@ namespace ez {
 		
 	public:
 		class iterator {
-			bool validBlock() const {
+			bool validBlock() const noexcept {
 				return (mapIter->second[0] != nullptr) && (mapIter->second[0]->size() != 0);
 			}
 		public:
@@ -342,9 +402,12 @@ namespace ez {
 			using pointer = value_type*;
 			using difference_type = std::ptrdiff_t;
 
-			iterator()
-			{}
-			iterator(map_iterator it, map_iterator end)
+			iterator() noexcept = default;
+			~iterator() = default;
+			iterator(const iterator& other) noexcept = default;
+			iterator& operator=(const iterator & other) noexcept = default;
+
+			iterator(map_iterator it, map_iterator end) noexcept
 				: mapIter(it)
 				, mapEnd(end)
 			{
@@ -357,17 +420,12 @@ namespace ez {
 					}
 				}
 			}
-			iterator(map_iterator it, map_iterator end, block_iterator bit)
+			iterator(map_iterator it, map_iterator end, block_iterator bit) noexcept
 				: mapIter(it)
 				, mapEnd(end)
 				, blockIter(bit)
 			{}
-			~iterator()
-			{}
 
-			iterator(const iterator& other) = default;
-
-			iterator& operator=(const iterator& other) = default;
 
 			iterator& operator++() {
 				++blockIter;
@@ -382,17 +440,17 @@ namespace ez {
 				return copy;
 			}
 
-			bool operator==(const iterator& other) const {
+			bool operator==(const iterator& other) const noexcept {
 				return (mapIter == other.mapIter) && (blockIter == other.blockIter);
 			}
-			bool operator!=(const iterator& other) const {
+			bool operator!=(const iterator& other) const noexcept {
 				return (mapIter != other.mapIter) || (blockIter != other.blockIter);
 			}
 
-			reference operator*() {
+			reference operator*() noexcept {
 				return *blockIter;
 			}
-			pointer operator->() {
+			pointer operator->() noexcept {
 				return &*blockIter;
 			}
 		protected:
@@ -422,46 +480,47 @@ namespace ez {
 			using pointer = value_type*;
 			using difference_type = std::ptrdiff_t;
 
-			const_iterator() = default;
-			const_iterator(const const_iterator&) = default;
-			const_iterator& operator=(const const_iterator&) = default;
+			const_iterator() noexcept = default;
+			~const_iterator() = default;
+			const_iterator(const const_iterator&) noexcept = default;
+			const_iterator& operator=(const const_iterator&) noexcept = default;
 
-			const_iterator(map_iterator it, map_iterator end)
+			const_iterator(map_iterator it, map_iterator end) noexcept
 				: _inner(it, end)
 			{}
-			const_iterator(map_iterator it, map_iterator end, typename Block::iterator bit)
+			const_iterator(map_iterator it, map_iterator end, typename Block::iterator bit) noexcept
 				: _inner(it, end, bit)
 			{}
 
-			const_iterator(const iterator & other) 
+			const_iterator(const iterator & other) noexcept
 				: _inner(other)
 			{}
-			const_iterator& operator=(const iterator& other) {
+			const_iterator& operator=(const iterator& other) noexcept {
 				_inner = other;
 				return *this;
 			}
 
-			const_iterator& operator++() {
+			const_iterator& operator++() noexcept {
 				++_inner;
 				return *this;
 			}
-			const_iterator operator++(int) {
+			const_iterator operator++(int) noexcept {
 				const_iterator copy = *this;
 				++(*this);
 				return copy;
 			}
 
-			bool operator==(const const_iterator& other) const {
+			bool operator==(const const_iterator& other) const noexcept {
 				return _inner == other._inner;
 			}
-			bool operator!=(const const_iterator& other) const {
+			bool operator!=(const const_iterator& other) const noexcept {
 				return _inner != other._inner;
 			}
 
-			reference operator*() {
+			reference operator*() noexcept {
 				return *_inner;
 			}
-			pointer operator->() {
+			pointer operator->() noexcept {
 				return &*_inner;
 			}
 		private:

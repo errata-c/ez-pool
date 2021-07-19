@@ -13,7 +13,7 @@ struct Printer {
 	}
 };
 
-int main() {
+void strings() {
 	{
 		ez::LMemoryPool<std::string> pool;
 
