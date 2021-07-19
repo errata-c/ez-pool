@@ -6,7 +6,8 @@
 #include <cassert>
 
 namespace ez::intern {
-	template<typename T, std::size_t BlockSize = 256>
+	// This class is for internal use only
+	template<typename T, std::size_t BlockSize>
 	class MemoryBlock {
 	public:
 		static constexpr std::size_t BlockBytes = sizeof(T) * BlockSize;
@@ -15,7 +16,12 @@ namespace ez::intern {
 			Memory() : index(0) {};
 			~Memory() {};
 
-			std::uint8_t index;
+			// The index being 8 bits is the reason BlockSize must be 256 or less.
+			// To support blocks larger than 256, index would have to be a larger integer type.
+			// However, using a larger integer type would force the Memory union to use more data by default.
+			// Using uint8_t guarantees we can store any type, even char, using the least amount of memory.
+
+			uint8_t index;
 			T object;
 		};
 
@@ -28,6 +34,17 @@ namespace ez::intern {
 		static bool contains(const MemoryBlock* block, const T* obj) noexcept {
 			return (reinterpret_cast<std::uintptr_t>(block) < reinterpret_cast<std::uintptr_t>(obj)) &&
 				((reinterpret_cast<std::uintptr_t>(block) + BlockBytes) > reinterpret_cast<std::uintptr_t>(obj));
+		}
+
+		// Marks represent the free locations
+		std::bitset<BlockSize> calculateMarks() const noexcept {
+			std::bitset<BlockSize> marks;
+			int offset = top;
+			for (int count = numFree; count > 0; --count) {
+				marks.set(offset);
+				offset = data[offset].index;
+			}
+			return marks;
 		}
 
 		MemoryBlock() noexcept
@@ -49,7 +66,7 @@ namespace ez::intern {
 			return &mem.object;
 		}
 		void free(const T* obj) noexcept {
-			assert(!empty());
+			assert(isAllocated(obj));
 			++numFree;
 			int offset = static_cast<int>(obj - basePtr());
 			data[offset].index = static_cast<std::uint8_t>(top);
@@ -63,16 +80,19 @@ namespace ez::intern {
 			return &data.front().object;
 		}
 
-		bool contains(T* obj) const noexcept {
-			return obj >= (&data.data()->object) && obj < ((&data.data()->object) + BlockSize);
+		bool contains(const T* obj) const noexcept {
+			return contains(this, obj);
 		}
 		bool isFree(const T* obj) const noexcept {
-			for (const T & element : *this) {
-				if (obj == &element) {
-					return false;
+			int compare = obj - basePtr();
+			int offset = top;
+			for (int count = numFree; count > 0; --count) {
+				if (compare == offset) {
+					return true;
 				}
+				offset = data[offset].index;
 			}
-			return true;
+			return false;
 		}
 		bool isAllocated(const T* obj) const noexcept {
 			return !isFree(obj);
@@ -163,7 +183,7 @@ namespace ez::intern {
 			return BlockSize;
 		}
 
-		std::int16_t top, numFree;
+		int16_t top, numFree;
 		std::array<Memory, BlockSize> data;
 	
 		// Impl iterators
@@ -184,7 +204,7 @@ namespace ez::intern {
 				: block(it)
 				, index(_index)
 			{
-				markBlock();
+				marks = block->calculateMarks();
 			}
 			iterator_impl(Block* it, int _index, std::bitset<BlockSize> _marks)
 				: block(it)
@@ -249,15 +269,6 @@ namespace ez::intern {
 			Block* block;
 			int index;
 			std::bitset<BlockSize> marks;
-
-			void markBlock() {
-				/// Mark all free elements
-				int offset = block->top;
-				for (int count = block->numFree; count > 0; --count) {
-					marks.set(offset);
-					offset = block->data[offset].index;
-				}
-			}
 
 			void nextIndex() {
 				++index;
