@@ -1,8 +1,14 @@
 cmake_minimum_required(VERSION 3.15)
 
 project(EZ_POOL
-VERSION 0.2.1
-LANGUAGES CXX)
+	VERSION 0.3.0
+	LANGUAGES CXX
+)
+
+option(BUILD_TESTS "Build the test executables" ON)
+option(SEPARATE_DIRECTORY "Install the package into its own directory" ON)
+set(CONFIG_DIR "${CMAKE_INSTALL_DATAROOTDIR}/ez-pool" CACHE STRING "The relative directory to install package config files.")
+
 
 include(GNUInstallDirs)
 include(FetchContent)
@@ -10,14 +16,9 @@ include(FetchContent)
 FetchContent_Declare(
 	ez-cmake
 	GIT_REPOSITORY "https://github.com/errata-c/ez-cmake.git"
-	GIT_TAG "a59477ebb9d8ce1f686b99118586310f47cb7a80"
+	GIT_TAG "main"
 )
 FetchContent_MakeAvailable(ez-cmake)
-
-option(BUILD_TESTS "Build the test executables" ON)
-option(SEPARATE_DIRECTORY "Install the package into its own directory" ON)
-set(CONFIG_DIR "${CMAKE_INSTALL_DATAROOTDIR}/ez-pool" CACHE STRING "The relative directory to install package config files.")
-
 
 
 find_path(PHMAP_HEADERS "parallel_hashmap/phmap.h")
@@ -34,15 +35,14 @@ set_target_properties(ez-pool PROPERTIES EXPORT_NAME "pool")
 add_library(ez::pool ALIAS ez-pool)
 
 
-
 if(BUILD_TESTS)
 	add_subdirectory("tests")
 endif()
 
+
 if(SEPARATE_DIRECTORY)
 	set(CMAKE_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/ez-pool)
 endif()
-
 
 
 install(DIRECTORY "include/" DESTINATION "include")
