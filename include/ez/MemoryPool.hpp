@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <cinttypes>
 #include <cassert>
-#include <bitset>
 #include <parallel_hashmap/phmap.h>
 #include "intern/MemoryBlock.hpp"
 
@@ -14,7 +13,7 @@ namespace ez {
 	// Can allocate most of the time without referencing the map at all, only one pointer indirection to the topmost block.
 	// Can deallocate by accessing the map just once. That should be fairly performant.
 	// Note that the block size is not bytes, but a number of elements to store.
-	// This means if you need to conserve memory, you may want to change the size from its default.
+	// The number of elements cannot currently exceed 256.
 	template<typename T, std::size_t BlockSize = 256>
 	class MemoryPool {
 	private:
@@ -23,12 +22,10 @@ namespace ez {
 		using Block = ez::intern::MemoryBlock<T, BlockSize>;
 		using Alloc = std::array<Block*, 2>;
 
-		using map_t = phmap::flat_hash_map<const void*, Alloc>;
+		using map_t = phmap::flat_hash_map<std::uintptr_t, Alloc>;
 		using map_iterator = typename map_t::iterator;
 		using const_map_iterator = typename map_t::const_iterator;
 		using block_iterator = typename Block::iterator;
-
-		//static constexpr std::ptrdiff_t align = alignof(T);
 		
 		// Block size in bytes
 		static constexpr std::ptrdiff_t BlockBytes = sizeof(Block);
@@ -83,6 +80,7 @@ namespace ez {
 			return *this;
 		}
 		
+		// Returns nullptr if cannot allocate
 		T * alloc() {
 			if (top == nullptr) {
 				top = createBlock();
@@ -112,9 +110,8 @@ namespace ez {
 			return obj;
 		}
 
-		// Frees an object from the pool. Note that it is always possible to check if object is from this pool.
 		void free(T* obj) {
-			const void* id = blockId(obj);
+			std::uintptr_t id = blockId(obj);
 			map_iterator iter = map.find(id);
 
 			// If this triggers, then the obj pointer is not within any valid block range
@@ -146,6 +143,7 @@ namespace ez {
 			if (obj == nullptr) {
 				return obj;
 			}
+			// Placement new
 			new (obj) T{std::forward<Ts>(args)...};
 			return obj;
 		}
@@ -208,7 +206,7 @@ namespace ez {
 		}
 
 		// Free all blocks WITHOUT calling destructors for the contained elements.
-		// It is undefined behavior to call this method when elements have been constructed via calls to 'create'
+		// It is undefined behavior to call this method when elements have been constructed and have non-trivial destructors.
 		void clear() {
 			freeList.clear();
 			for (auto&& iter : map) {
@@ -222,11 +220,11 @@ namespace ez {
 			top = nullptr;
 		}
 
-		// Total capacity available
+		// Total object capacity available
 		std::ptrdiff_t capacity() const noexcept {
 			return static_cast<std::ptrdiff_t>(bcount * BlockSize);
 		}
-		// Total number of allocations
+		// Total number of object allocations
 		std::ptrdiff_t size() const noexcept {
 			return count;
 		}
@@ -283,8 +281,8 @@ namespace ez {
 		}
 
 		bool contains(const T* obj) const {
-			const void * block = blockId(obj);
-			const_map_iterator iter = map.find(block);
+			std::uintptr_t id = blockId(obj);
+			const_map_iterator iter = map.find(id);
 
 			if (iter != map.end()) {
 				return Block::contains(iter->second[0], obj) || Block::contains(iter->second[1], obj);
@@ -295,8 +293,8 @@ namespace ez {
 		}
 
 		iterator find(const T* obj) {
-			void * block = blockId(obj);
-			map_iterator iter = map.find(block);
+			std::uintptr_t id = blockId(obj);
+			map_iterator iter = map.find(id);
 
 			if (iter != map.end()) {
 				if (Block::contains(iter->second[0], obj)) {
@@ -314,8 +312,8 @@ namespace ez {
 			}
 		}
 		const_iterator find(const T* obj) const {
-			const void* block = blockId(obj);
-			const_map_iterator iter = map.find(block);
+			std::uintptr_t id = blockId(obj);
+			const_map_iterator iter = map.find(id);
 
 			if (iter != map.end()) {
 				if (Block::contains(iter->second[0], obj)) {
@@ -333,12 +331,13 @@ namespace ez {
 			}
 		}
 	private:
-		/// Utility methods
-		static const void* blockId(const T* base) noexcept {
-			std::uintptr_t offset = reinterpret_cast<std::uintptr_t>(base) % BlockBytes;
-			return reinterpret_cast<const void*>(reinterpret_cast<std::uintptr_t>(base) - offset);
+		// Calculate a block multiple from an object pointer
+		static std::uintptr_t blockId(const T* base) noexcept {
+			return reinterpret_cast<std::uintptr_t>(base) / BlockBytes;
 		}
 
+		// Create a new block, insert it into the map, and return the pointer to the new block.
+		// Returns nullptr if allocation fails.
 		Block * createBlock() {
 			Block* block = new Block{};
 			if (!block) {
@@ -346,33 +345,42 @@ namespace ez {
 			}
 			++bcount;
 
-			const void* low = blockId(block->basePtr());
-			const void* high = reinterpret_cast<const void*>(reinterpret_cast<std::uintptr_t>(low) + BlockBytes);
-
+			std::uintptr_t low = blockId(block->basePtr());
+			std::uintptr_t high = low + 1;
+			
 			auto iter = map.find(low);
+			
 			if (iter == map.end()) {
+				// If low is NOT in map, add to map as the second half of alloc
 				map.insert(iter, { low, Alloc{ nullptr, block } });
 			}
 			else {
+				// If low is in map already, set the second half of alloc to new block 
+				assert(iter->second[1] == nullptr);
 				iter->second[1] = block;
 			}
 
 			iter = map.find(high);
 			if (iter == map.end()) {
+				// If low is NOT in map, add to map as the first half of alloc
 				map.insert(iter, {high, Alloc{ block, nullptr }});
 			}
 			else {
+				// If low is in map already, set the first half of alloc to new block
+				assert(iter->second[0] == nullptr);
 				iter->second[0] = block;
 			}
 
 			return block;
 		}
 		void destroyBlock(Block * block) {
-			void * low = blockId(block->basePtr());
-			void * high = reinterpret_cast<const void*>(reinterpret_cast<std::uintptr_t>(low) + BlockBytes);
+			std::uintptr_t low = blockId(block->basePtr());
+			std::uintptr_t high = low + 1;
 
 			auto iter = map.find(low);
 			assert(iter != map.end()); // The block must exist
+
+			assert(iter->second[1] == block);
 			iter->second[1] = nullptr;
 			if (iter->second[0] == nullptr) {
 				map.erase(iter);
@@ -380,6 +388,8 @@ namespace ez {
 
 			iter = map.find(high);
 			assert(iter != map.end()); // The block must exist
+
+			assert(iter->second[0] == block);
 			iter->second[0] = nullptr;
 			if (iter->second[1] == nullptr) {
 				map.erase(iter);
