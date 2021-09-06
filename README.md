@@ -1,5 +1,7 @@
 # ez-pool
-Memory pools and object pools for modern c++
+Memory pools and object pools for c++.
+
+Makes use of a unique allocation strategy to minimize overhead, allow for checking ownership of objects in the pool, and iterating over all the allocated objects.
 
 ### CMake
 ```cmake
@@ -10,14 +12,15 @@ target_link_libraries(my_target PRIVATE ez::pool)
 ### C++
 ```cpp
 #include <ez/MemoryPool.hpp>
+#include <cassert>
 
 int main() {
-	// Create the pool
-	ez::MemoryPool<int> pool;
+	// Create some memory pools
+	ez::MemoryPool<int> pool0, pool1;
 	
 	// Allocate some objects
-	int * obj0 = pool.alloc();
-	int * obj1 = pool.alloc();
+	int * obj0 = pool0.alloc();
+	int * obj1 = pool1.alloc();
 	
 	// Returns nullptr if allocation fails
 	if(obj0 == nullptr) {
@@ -29,9 +32,15 @@ int main() {
 		return -1;
 	}
 	
+    // Check for ownership
+    assert(pool0.contains(obj0));
+    assert(pool1.contains(obj1));
+    assert(!pool0.contains(obj1));
+    assert(!pool1.contains(obj0));
+    
 	// Free the pointers when done
-	pool.free(obj0);
-	pool.free(obj1);
+	pool0.free(obj0);
+	pool1.free(obj1);
     
     // No destructors are called for the objects inside the basic memory pool.
     // To allocate and construct, call the create method
