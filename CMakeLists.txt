@@ -1,14 +1,12 @@
 cmake_minimum_required(VERSION 3.15)
 
 project(EZ_POOL
-	VERSION 0.3.0
+	VERSION 0.3.1
 	LANGUAGES CXX
 )
 
-option(BUILD_TESTS "Build the test executables" ON)
-option(SEPARATE_DIRECTORY "Install the package into its own directory" ON)
-set(CONFIG_DIR "${CMAKE_INSTALL_DATAROOTDIR}/ez-pool" CACHE STRING "The relative directory to install package config files.")
-
+option(EZ_POOL_BUILD_TESTS "Build the test executables" ON)
+set(EZ_POOL_CONFIG_DIR "${CMAKE_INSTALL_DATAROOTDIR}/ez-pool" CACHE STRING "The relative directory to install package config files.")
 
 include(GNUInstallDirs)
 include(FetchContent)
@@ -35,15 +33,9 @@ set_target_properties(ez-pool PROPERTIES EXPORT_NAME "pool")
 add_library(ez::pool ALIAS ez-pool)
 
 
-if(BUILD_TESTS)
+if(EZ_POOL_BUILD_TESTS)
 	add_subdirectory("tests")
 endif()
-
-
-if(SEPARATE_DIRECTORY)
-	set(CMAKE_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/ez-pool)
-endif()
-
 
 install(DIRECTORY "include/" DESTINATION "include")
 
@@ -54,7 +46,7 @@ install_package(
 	NAMESPACE "ez::"
 	EXPORT "ez-pool-targets"
 	VERSION "${EZ_POOL_VERSION}"
-	DESTINATION "${CONFIG_DIR}"
+	DESTINATION "${EZ_POOL_CONFIG_DIR}"
 	COMPATIBILITY SameMajorVersion
 	ARCH_INDEPENDENT
 	
