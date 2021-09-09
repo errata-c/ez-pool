@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.16)
 
 project(EZ_POOL
 	VERSION 0.3.1
@@ -6,9 +6,8 @@ project(EZ_POOL
 )
 
 option(EZ_POOL_BUILD_TESTS "Build the test executables" ON)
-set(EZ_POOL_CONFIG_DIR "${CMAKE_INSTALL_DATAROOTDIR}/ez-pool" CACHE STRING "The relative directory to install package config files.")
+set(EZ_POOL_CONFIG_DIR "share/ez-pool" CACHE STRING "The relative directory to install package config files.")
 
-include(GNUInstallDirs)
 include(FetchContent)
 
 FetchContent_Declare(
