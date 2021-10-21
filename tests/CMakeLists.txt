@@ -1,21 +1,17 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.16)
+project(EZ_POOL_TESTS)
 
-project(EZ_POOL_TESTS
-VERSION 0.1)
 
 find_package(fmt CONFIG REQUIRED)
-
-# We use the Catch2 library for testing
 find_package(Catch2 CONFIG REQUIRED)
 
 
-add_executable(ez-pool-tests 
+add_executable(ez_pool_tests 
 	"main.cpp"
-	"basic/basic.cpp"
-	"basic/block.cpp"
-	"strings/strings.cpp"
+	"basic.cpp"
+	"block.cpp"
 )
-target_link_libraries(ez-pool-tests PRIVATE 
+target_link_libraries(ez_pool_tests PRIVATE 
 	ez::pool
 	fmt::fmt
 	Catch2::Catch2
