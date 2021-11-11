@@ -14,15 +14,15 @@ namespace ez {
 	// Can deallocate by accessing the map just once. That should be fairly performant.
 	// Note that the block size is not bytes, but a number of elements to store.
 	// The number of elements cannot currently exceed 256.
-	template<typename T, std::size_t BlockSize = 256>
-	class MemoryPool {
+	template<template<typename K, typename V> typename map_template, typename T, std::size_t BlockSize = 256>
+	class BasicMemoryPool {
 	private:
 		static_assert(BlockSize <= 256, "BlockSize currently must be less than or equal to 256!");
 
 		using Block = ez::intern::MemoryBlock<T, BlockSize>;
 		using Alloc = std::array<Block*, 2>;
 
-		using map_t = phmap::flat_hash_map<std::uintptr_t, Alloc>;
+		using map_t = map_template<std::uintptr_t, Alloc>;
 		using map_iterator = typename map_t::iterator;
 		using const_map_iterator = typename map_t::const_iterator;
 		using block_iterator = typename Block::iterator;
@@ -45,12 +45,12 @@ namespace ez {
 		class iterator;
 		class const_iterator;
 
-		MemoryPool()
+		BasicMemoryPool()
 			: count(0)
 			, bcount(0)
 			, top(nullptr)
 		{}
-		MemoryPool(MemoryPool && other) noexcept
+		BasicMemoryPool(BasicMemoryPool && other) noexcept
 			: count(other.count)
 			, bcount(other.bcount)
 			, freeList(std::move(other.freeList))
@@ -61,7 +61,7 @@ namespace ez {
 			other.bcount = 0;
 			other.top = nullptr;
 		}
-		~MemoryPool() {
+		~BasicMemoryPool() {
 			for (auto && iter : map) {
 				if (iter.second[0] != nullptr) {
 					delete iter.second[0];
@@ -69,7 +69,7 @@ namespace ez {
 			}
 		}
 
-		MemoryPool& operator=(MemoryPool&& other) noexcept {
+		BasicMemoryPool& operator=(BasicMemoryPool&& other) noexcept {
 			count = other.count;
 			bcount = other.bcount;
 			freeList = std::move(other.freeList);
@@ -241,17 +241,17 @@ namespace ez {
 		}
 
 		const_iterator begin() const noexcept {
-			return const_iterator(const_cast<MemoryPool*>(this)->begin());
+			return const_iterator(const_cast<BasicMemoryPool*>(this)->begin());
 		}
 		const_iterator end() const noexcept {
-			return const_iterator(const_cast<MemoryPool*>(this)->end());
+			return const_iterator(const_cast<BasicMemoryPool*>(this)->end());
 		}
 
 		const_iterator cbegin() const noexcept {
-			return const_iterator(const_cast<MemoryPool*>(this)->begin());
+			return const_iterator(const_cast<BasicMemoryPool*>(this)->begin());
 		}
 		const_iterator cend() const noexcept {
-			return const_iterator(const_cast<MemoryPool*>(this)->end());
+			return const_iterator(const_cast<BasicMemoryPool*>(this)->end());
 		}
 
 		iterator erase(const_iterator _pos) {
@@ -273,7 +273,7 @@ namespace ez {
 			return pos;
 		}
 
-		void swap(MemoryPool& other) noexcept {
+		void swap(BasicMemoryPool& other) noexcept {
 			map.swap(other.map);
 			freeList.swap(other.freeList);
 			std::swap(count, other.count);
@@ -464,7 +464,7 @@ namespace ez {
 				return &*blockIter;
 			}
 		protected:
-			friend class MemoryPool;
+			friend class BasicMemoryPool;
 			map_iterator mapIter, mapEnd;
 			block_iterator blockIter;
 
@@ -534,8 +534,16 @@ namespace ez {
 				return &*_inner;
 			}
 		private:
-			friend class MemoryPool;
+			friend class BasicMemoryPool;
 			iterator _inner;
 		};
 	};
+
+	// Best memory pool for smaller numbers of objects, and single threaded operations.
+	template<typename T, std::size_t N = 256>
+	using MemoryPool = BasicMemoryPool<phmap::flat_hash_map, T, N>;
+
+	// Best memory pool for large numbers of objects and multithreaded operations.
+	template<typename T, std::size_t N = 256>
+	using ParallelMemoryPool = BasicMemoryPool<phmap::parallel_flat_hash_map, T, N>;
 };
