@@ -17,7 +17,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(ez-cmake)
 
-
 find_path(PHMAP_HEADERS "parallel_hashmap/phmap.h")
 
 add_library(ez-pool INTERFACE)
@@ -36,20 +35,22 @@ if(EZ_POOL_BUILD_TESTS)
 	add_subdirectory("tests")
 endif()
 
-install(DIRECTORY "include/" DESTINATION "include")
+ez_is_project_top_level(IS_TOP_LEVEL)
 
-install(TARGETS "ez-pool" EXPORT "ez-pool-targets")
+if(IS_TOP_LEVEL)
+	install(DIRECTORY "include/" DESTINATION "include")
 
-install_package(
-	NAME "ez-pool"
-	NAMESPACE "ez::"
-	EXPORT "ez-pool-targets"
-	VERSION "${EZ_POOL_VERSION}"
-	DESTINATION "${EZ_POOL_CONFIG_DIR}"
-	COMPATIBILITY SameMajorVersion
-	ARCH_INDEPENDENT
+	install(TARGETS "ez-pool" EXPORT "ez-pool-targets")
+
+	install_package(
+		NAME "ez-pool"
+		NAMESPACE "ez::"
+		EXPORT "ez-pool-targets"
+		VERSION "${EZ_POOL_VERSION}"
+		DESTINATION "${EZ_POOL_CONFIG_DIR}"
+		COMPATIBILITY SameMajorVersion
+		ARCH_INDEPENDENT
 	
-	POSTCONFIG "cmake/postconfig.cmake"
-)
-
-
+		POSTCONFIG "cmake/postconfig.cmake"
+	)
+endif()
