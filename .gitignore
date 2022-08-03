@@ -1,3 +1,6 @@
 out
 .vs
 CMakeSettings.json
+CMakeUserPresets.json
+build
+*.bak
