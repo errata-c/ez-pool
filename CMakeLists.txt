@@ -19,8 +19,8 @@ FetchContent_MakeAvailable(ez-cmake)
 set(EZ_POOL_CONFIG_DIR "${CMAKE_INSTALL_DATADIR}/ez-pool" CACHE STRING "The relative directory to install package config files.")
 
 find_path(PHMAP_HEADERS "parallel_hashmap/phmap.h")
-if(${PHMAP_HEADERS} STREQUAL PHMAP_HEADERS-NOTFOUND)
-	message(FATAL_ERROR "Parallel hashmap library not found!")
+if(${PHMAP_HEADERS} STREQUAL "PHMAP_HEADERS-NOTFOUND")
+	message(FATAL_ERROR "Could not locate the headers for the parallel_hashmap library!")
 endif()
 
 add_library(ez-pool INTERFACE)

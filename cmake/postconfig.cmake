@@ -1,6 +1,6 @@
 
 find_path(PHMAP_HEADERS "parallel_hashmap/phmap.h")
-if(${PHMAP_HEADERS} STREQUAL "PHMAP_HEADERS-NOTFOUND")
+if("${PHMAP_HEADERS}" STREQUAL "PHMAP_HEADERS-NOTFOUND")
 	message(FATAL_ERROR "Could not locate the headers for the parallel_hashmap library!")
 endif()
 
