@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.21)
 project(EZ_POOL_TESTS)
 
 find_package(fmt CONFIG REQUIRED)
@@ -14,7 +14,3 @@ target_link_libraries(ez_pool_tests PRIVATE
 	fmt::fmt
 	Catch2::Catch2WithMain
 )
-if("${CMAKE_CXX_FLAGS}" MATCHES ".*-fsanitize=address.*")
-	#string(REGEX REPLACE "/RTC(su|[1su])" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-	message("${CMAKE_CXX_FLAGS}")
-endif()

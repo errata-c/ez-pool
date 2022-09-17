@@ -1,14 +1,13 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.21)
 
 project(EZ_POOL
-	VERSION 0.3.1
+	VERSION 0.4.0
 	LANGUAGES CXX
+	DESCRIPTION "A simple memory and object pooling library"
 )
 
-option(EZ_POOL_BUILD_TESTS "Build the test executables" ON)
-set(EZ_POOL_CONFIG_DIR "share/ez-pool" CACHE STRING "The relative directory to install package config files.")
-
 include(FetchContent)
+include(GNUInstallDirs)
 
 FetchContent_Declare(
 	ez-cmake
@@ -17,12 +16,17 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(ez-cmake)
 
+set(EZ_POOL_CONFIG_DIR "${CMAKE_INSTALL_DATADIR}/ez-pool" CACHE STRING "The relative directory to install package config files.")
+
 find_path(PHMAP_HEADERS "parallel_hashmap/phmap.h")
+if(${PHMAP_HEADERS} STREQUAL PHMAP_HEADERS-NOTFOUND)
+	message(FATAL_ERROR "Parallel hashmap library not found!")
+endif()
 
 add_library(ez-pool INTERFACE)
 target_compile_features(ez-pool INTERFACE cxx_std_17)
 target_include_directories(ez-pool INTERFACE 
-	"$<BUILD_INTERFACE:${PHMAP_HEADERS}>" 
+	"$<BUILD_INTERFACE:${PHMAP_HEADERS}>"
 	"$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>" 
 	"$<INSTALL_INTERFACE:include>"
 )
@@ -30,14 +34,12 @@ target_compile_options(ez-pool INTERFACE "$<BUILD_INTERFACE:$<$<CXX_COMPILER_ID:
 set_target_properties(ez-pool PROPERTIES EXPORT_NAME "pool")
 add_library(ez::pool ALIAS ez-pool)
 
-
-if(EZ_POOL_BUILD_TESTS)
-	add_subdirectory("tests")
-endif()
-
-ez_is_project_top_level(IS_TOP_LEVEL)
-
-if(IS_TOP_LEVEL)
+if(PROJECT_IS_TOP_LEVEL)
+	include(CTest)
+	if(BUILD_TESTING)
+		add_subdirectory("tests")
+	endif()
+	
 	install(DIRECTORY "include/" DESTINATION "include")
 
 	install(TARGETS "ez-pool" EXPORT "ez-pool-targets")
@@ -50,7 +52,7 @@ if(IS_TOP_LEVEL)
 		DESTINATION "${EZ_POOL_CONFIG_DIR}"
 		COMPATIBILITY SameMajorVersion
 		ARCH_INDEPENDENT
-	
+		
 		POSTCONFIG "cmake/postconfig.cmake"
 	)
 endif()
