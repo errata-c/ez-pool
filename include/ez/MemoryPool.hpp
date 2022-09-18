@@ -10,10 +10,12 @@
 #include "intern/MemoryBlock.hpp"
 
 namespace ez {
-	// Can allocate most of the time without referencing the map at all, only one pointer indirection to the topmost block.
-	// Can deallocate by accessing the map just once. That should be fairly performant.
-	// Note that the block size is not bytes, but a number of elements to store.
-	// The number of elements cannot currently exceed 256.
+	/*
+	Can allocate most of the time without referencing the map at all, only one pointer indirection to the topmost block.
+	Can deallocate by accessing the map just once. That should be fairly performant.
+	Note that the block size is not bytes, but a number of elements to store.
+	The number of elements cannot currently exceed 256.
+	*/
 	template<template<typename K, typename V> typename map_template, typename T, std::size_t BlockSize = 256>
 	class BasicMemoryPool {
 	private:
@@ -221,11 +223,11 @@ namespace ez {
 		}
 
 		// Total object capacity available
-		std::ptrdiff_t capacity() const noexcept {
+		ptrdiff_t capacity() const noexcept {
 			return static_cast<std::ptrdiff_t>(bcount * BlockSize);
 		}
 		// Total number of object allocations
-		std::ptrdiff_t size() const noexcept {
+		ptrdiff_t size() const noexcept {
 			return count;
 		}
 

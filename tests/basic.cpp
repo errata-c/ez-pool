@@ -1,7 +1,10 @@
-#include <catch2/catch_all.hpp>
 #include <cstdlib>
-#include <fmt/printf.h>
+#include <memory>
+#include <string>
+#include <fmt/core.h>
 #include <ez/MemoryPool.hpp>
+
+#include <catch2/catch_all.hpp>
 
 TEST_CASE("basic") {
 	ez::MemoryPool<int> pool;
@@ -96,3 +99,35 @@ TEST_CASE("basic") {
 	}
 	REQUIRE(count == 0);
 }
+
+TEST_CASE("Move assign memory pool") {
+	using strong_ref = std::shared_ptr<std::string>;
+	using weak_ref = std::weak_ptr<std::string>;
+	
+	ez::MemoryPool<strong_ref> pool;
+	weak_ref tracker;
+	{
+		strong_ref * ptr = pool.create(new std::string("This is a string, DUH"));
+		tracker = *ptr;
+	}
+
+	REQUIRE(pool.size() == 1);
+	REQUIRE(!tracker.expired());
+
+	pool.create(tracker.lock());
+	pool.create(tracker.lock());
+
+	REQUIRE(tracker.use_count() == 3);
+
+	ez::MemoryPool<strong_ref> second = std::move(pool);
+	REQUIRE(second.size() == 3);
+	REQUIRE(tracker.use_count() == 3);
+
+
+	second.destroy_clear();
+	REQUIRE(second.size() == 0);
+	REQUIRE(second.empty());
+
+	REQUIRE(tracker.expired());
+}
+
