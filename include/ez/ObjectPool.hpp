@@ -105,8 +105,5 @@ namespace ez {
 	};
 
 	template<typename T, std::size_t N = 256>
-	using ObjectPool = BasicObjectPool<phmap::flat_hash_map, T, N>;
-
-	template<typename T, std::size_t N = 256>
-	using ParallelObjectPool = BasicObjectPool<phmap::parallel_flat_hash_map, T, N>;
+	using ObjectPool = BasicObjectPool<std::unordered_map, T, N>;
 };

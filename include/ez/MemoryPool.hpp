@@ -3,10 +3,10 @@
 #include <array>
 #include <memory>
 #include <vector>
+#include <unordered_map>
 #include <algorithm>
 #include <cinttypes>
 #include <cassert>
-#include <parallel_hashmap/phmap.h>
 #include "intern/MemoryBlock.hpp"
 
 namespace ez {
@@ -540,12 +540,7 @@ namespace ez {
 			iterator _inner;
 		};
 	};
-
-	// Best memory pool for smaller numbers of objects, and single threaded operations.
+	
 	template<typename T, std::size_t N = 256>
-	using MemoryPool = BasicMemoryPool<phmap::flat_hash_map, T, N>;
-
-	// Best memory pool for large numbers of objects and multithreaded operations.
-	template<typename T, std::size_t N = 256>
-	using ParallelMemoryPool = BasicMemoryPool<phmap::parallel_flat_hash_map, T, N>;
+	using MemoryPool = BasicMemoryPool<std::unordered_map, T, N>;
 };
