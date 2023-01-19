@@ -1,7 +1,7 @@
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.24)
 
 project(EZ_POOL
-	VERSION 0.4.1
+	VERSION 0.4.2
 	LANGUAGES CXX
 	DESCRIPTION "A simple memory and object pooling library"
 )
